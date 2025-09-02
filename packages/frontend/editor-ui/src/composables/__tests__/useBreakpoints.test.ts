@@ -18,12 +18,10 @@ vi.mock('@/composables/useDebounce', () => ({
 }));
 
 describe('useBreakpoints', () => {
-	let removeEventListenerSpy: ReturnType<typeof vi.spyOn>;
 	let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
 		addEventListenerSpy = vi.spyOn(window, 'addEventListener');
-		removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 	});
 
 	afterEach(() => {

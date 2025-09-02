@@ -30,12 +30,12 @@ export function useBreakpoints() {
 	const isTablet = computed(() => width.value > BREAKPOINT_SM && width.value < BREAKPOINT_LG);
 	const isDesktop = computed(() => width.value >= BREAKPOINT_LG);
 
-	const onResize = () => {
-		void callDebounced(onResizeEnd, { debounceTime: 50 });
-	};
-
 	const onResizeEnd = () => {
 		width.value = window.innerWidth;
+	};
+
+	const onResize = () => {
+		void callDebounced(onResizeEnd, { debounceTime: 50 });
 	};
 
 	onMounted(() => {

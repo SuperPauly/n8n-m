@@ -486,7 +486,8 @@ const close = async () => {
 			try {
 				pinnedData.setData(jsonParse(value), 'on-ndv-close-modal');
 			} catch (error) {
-				console.error(error);
+				// Error handling for invalid JSON data
+				ndvStore.setOutputPanelEditModeEnabled(false);
 			}
 		}
 
@@ -509,7 +510,7 @@ const closeMobileDrawer = () => {
 	// Close the node details by clearing the active node
 	setTimeout(() => {
 		if (isMobile.value) {
-			close();
+			void close();
 		}
 	}, 100);
 };

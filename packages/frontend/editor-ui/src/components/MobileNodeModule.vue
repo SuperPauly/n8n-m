@@ -3,10 +3,8 @@ import type {
 	IRunDataDisplayMode,
 	IUpdateInformation,
 	NodePanelType,
-	TargetItem,
 } from '@/Interface';
-import type { IRunData, NodeConnectionType, Workflow } from 'n8n-workflow';
-import { computed } from 'vue';
+import type { NodeConnectionType, Workflow, INodeTypeDescription } from 'n8n-workflow';
 
 import NodeSettings from '@/components/NodeSettings.vue';
 import OutputPanel from '@/components/OutputPanel.vue';
@@ -31,18 +29,18 @@ const emit = defineEmits<{
 	onWorkflowActivate: [];
 }>();
 
-const props = withDefaults(
+withDefaults(
 	defineProps<{
 		workflowObject: Workflow;
 		readOnly?: boolean;
 		isProductionExecutionPreview?: boolean;
 		// Node Settings props
 		pushRef?: string;
-		activeNodeType?: any;
-		foreignCredentials?: any[];
+		activeNodeType?: INodeTypeDescription;
+		foreignCredentials?: string[];
 		blockUi?: boolean;
 		inputSize?: number;
-		settingsEventBus?: any;
+		settingsEventBus?: unknown;
 		isDragging?: boolean;
 		// Output Panel props
 		canLinkRuns?: boolean;
@@ -55,15 +53,19 @@ const props = withDefaults(
 	{
 		isProductionExecutionPreview: false,
 		readOnly: false,
+		pushRef: '',
+		activeNodeType: undefined,
 		foreignCredentials: () => [],
 		blockUi: false,
 		inputSize: 0,
+		settingsEventBus: undefined,
 		isDragging: false,
 		canLinkRuns: false,
 		runIndex: 0,
 		linkedRuns: false,
 		isReadOnly: false,
 		isPaneActive: false,
+		displayMode: 'table' as IRunDataDisplayMode,
 	},
 );
 
@@ -83,8 +85,8 @@ const onLinkRunToOutput = () => {
 	emit('onLinkRunToOutput');
 };
 
-const onUnlinkRun = (pane: string) => {
-	emit('onUnlinkRun', pane);
+const onUnlinkRun = () => {
+	emit('onUnlinkRun', 'output');
 };
 
 const onRunOutputIndexChange = (run: number) => {
@@ -115,8 +117,8 @@ const onStopExecution = () => {
 	emit('stopExecution');
 };
 
-const onDisplayModeChange = (pane: NodePanelType, mode: IRunDataDisplayMode) => {
-	emit('onDisplayModeChange', pane, mode);
+const onDisplayModeChange = (mode: IRunDataDisplayMode) => {
+	emit('onDisplayModeChange', 'output', mode);
 };
 
 const onWorkflowActivate = () => {
