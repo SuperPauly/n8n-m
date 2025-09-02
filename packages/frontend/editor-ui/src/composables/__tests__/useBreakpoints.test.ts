@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { nextTick } from 'vue';
+import { mount } from '@vue/test-utils';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 
 // Mock window.innerWidth
@@ -61,8 +63,18 @@ describe('useBreakpoints', () => {
 		expect(bp.value).toBe('LG');
 	});
 
-	it('should register resize event listener on mount', () => {
-		useBreakpoints();
+	it('should register resize event listener on mount', async () => {
+		// Create a test component that uses the composable to trigger onMounted
+		const TestComponent = {
+			setup() {
+				return useBreakpoints();
+			},
+			template: '<div></div>',
+		};
+
+		mount(TestComponent);
+		await nextTick();
+
 		expect(addEventListenerSpy).toHaveBeenCalledWith('resize', expect.any(Function));
 	});
 });
