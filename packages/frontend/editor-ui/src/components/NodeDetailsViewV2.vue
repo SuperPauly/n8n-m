@@ -46,6 +46,8 @@ import OutputPanel from './OutputPanel.vue';
 import PanelDragButtonV2 from './PanelDragButtonV2.vue';
 import TriggerPanel from './TriggerPanel.vue';
 import MobileNodeModule from './MobileNodeModule.vue';
+import NDVHeader from './NDVHeader.vue';
+import NDVFloatingNodes from './NDVFloatingNodes.vue';
 import { ElDrawer } from 'element-plus';
 import { useTelemetryContext } from '@/composables/useTelemetryContext';
 
