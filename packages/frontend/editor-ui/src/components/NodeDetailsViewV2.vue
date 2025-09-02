@@ -13,6 +13,7 @@ import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from
 
 import NodeSettings from '@/components/NodeSettings.vue';
 
+import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useExternalHooks } from '@/composables/useExternalHooks';
 import { useKeybindings } from '@/composables/useKeybindings';
 import { useMessage } from '@/composables/useMessage';
@@ -44,6 +45,8 @@ import InputPanel from './InputPanel.vue';
 import OutputPanel from './OutputPanel.vue';
 import PanelDragButtonV2 from './PanelDragButtonV2.vue';
 import TriggerPanel from './TriggerPanel.vue';
+import MobileNodeModule from './MobileNodeModule.vue';
+import { ElDrawer } from 'element-plus';
 import { useTelemetryContext } from '@/composables/useTelemetryContext';
 
 const emit = defineEmits<{
@@ -82,6 +85,7 @@ const telemetryContext = useTelemetryContext({ view_shown: 'ndv' });
 const i18n = useI18n();
 const message = useMessage();
 const { APP_Z_INDEXES } = useStyles();
+const { isMobile } = useBreakpoints();
 
 const settingsEventBus = createEventBus();
 const runInputIndex = ref(-1);
@@ -100,6 +104,7 @@ const isPairedItemHoveringEnabled = ref(true);
 const dialogRef = ref<HTMLDialogElement>();
 const containerRef = useTemplateRef('containerRef');
 const mainPanelRef = useTemplateRef('mainPanelRef');
+const showNodeDrawer = ref(false);
 
 // computed
 const pushRef = computed(() => ndvStore.pushRef);
@@ -497,6 +502,16 @@ const close = async () => {
 	ndvStore.resetNDVPushRef();
 };
 
+const closeMobileDrawer = () => {
+	showNodeDrawer.value = false;
+	// Close the node details by clearing the active node
+	setTimeout(() => {
+		if (isMobile.value) {
+			close();
+		}
+	}, 100);
+};
+
 useKeybindings({ Escape: close });
 
 const trackRunChange = (run: number, pane: string) => {
@@ -635,6 +650,11 @@ watch(
 		if (window.top && !isActiveStickyNode.value) {
 			window.top.postMessage(JSON.stringify({ command: node ? 'openNDV' : 'closeNDV' }), '*');
 		}
+
+		// Handle mobile drawer visibility
+		if (isMobile.value) {
+			showNodeDrawer.value = !!node;
+		}
 	},
 	{ immediate: true },
 );
@@ -706,7 +726,9 @@ onBeforeUnmount(() => {
 	>
 		<div :class="$style.backdrop" :style="{ zIndex: APP_Z_INDEXES.NDV }" @click="close"></div>
 
+		<!-- Desktop/tablet layout -->
 		<dialog
+			v-if="!isMobile"
 			ref="dialogRef"
 			open
 			aria-modal="true"
@@ -844,6 +866,66 @@ onBeforeUnmount(() => {
 				</main>
 			</div>
 		</dialog>
+
+		<!-- Mobile: bottom drawer -->
+		<ElDrawer
+			v-if="isMobile"
+			v-model="showNodeDrawer"
+			direction="btt"
+			size="70vh"
+			:modal="false"
+			:wrapper-closable="false"
+			:close-on-click-modal="false"
+			:z-index="APP_Z_INDEXES.NDV"
+			:before-close="closeMobileDrawer"
+			class="mobile-node-drawer"
+			aria-label="Node configuration"
+		>
+			<template #header>
+				<div :class="$style.mobileHeader">
+					<NDVHeader
+						:node-name="activeNode.name"
+						:node-type-name="activeNodeType.defaults.name ?? activeNodeType.displayName"
+						:icon="getNodeIconSource(activeNodeType)"
+						:docs-url="docsUrl"
+						@close="closeMobileDrawer"
+						@rename="onRename"
+					/>
+				</div>
+			</template>
+			<MobileNodeModule
+				:workflow-object="workflowObject"
+				:read-only="readOnly"
+				:is-production-execution-preview="isProductionExecutionPreview"
+				:push-ref="pushRef"
+				:active-node-type="activeNodeType"
+				:foreign-credentials="foreignCredentials"
+				:block-ui="blockUi && showTriggerPanel"
+				:input-size="inputSize"
+				:settings-event-bus="settingsEventBus"
+				:is-dragging="isDragging"
+				:can-link-runs="canLinkRuns"
+				:run-index="outputRun"
+				:linked-runs="linked"
+				:is-read-only="readOnly || hasForeignCredential"
+				:is-pane-active="isOutputPaneActive"
+				:display-mode="outputPanelDisplayMode"
+				@on-activate-output-pane="activateOutputPane"
+				@on-link-run-to-output="onLinkRunToOutput"
+				@on-unlink-run="onUnlinkRun"
+				@on-run-output-index-change="onRunOutputIndexChange"
+				@on-open-settings="openSettings"
+				@on-output-table-mounted="onOutputTableMounted"
+				@on-output-item-hover="onOutputItemHover"
+				@on-search="onSearch"
+				@on-node-execute="onNodeExecute"
+				@on-display-mode-change="handleChangeDisplayMode"
+				@switch-selected-node="onSwitchSelectedNode"
+				@open-connection-node-creator="onOpenConnectionNodeCreator"
+				@stop-execution="onStopExecution"
+				@on-workflow-activate="onWorkflowActivate"
+			/>
+		</ElDrawer>
 	</Teleport>
 </template>
 
@@ -936,5 +1018,38 @@ onBeforeUnmount(() => {
 	left: 50%;
 	transform: translateX(-50%);
 	height: var(--draggable-height);
+}
+
+/* Mobile-specific styles */
+.mobileHeader {
+	padding: 0;
+	margin: 0;
+}
+
+@media (max-width: 768px) {
+	.backdrop {
+		/* Ensure canvas is visible when drawer is closed */
+		display: none;
+	}
+	
+	.dialog {
+		/* Hide desktop dialog on mobile */
+		display: none;
+	}
+}
+
+/* Global mobile drawer styles */
+:global(.mobile-node-drawer) {
+	@media (max-width: 768px) {
+		.el-drawer__header {
+			padding: 0;
+			margin: 0;
+		}
+		
+		.el-drawer__body {
+			padding: 0;
+			overflow: hidden;
+		}
+	}
 }
 </style>
