@@ -28,6 +28,7 @@ const emit = defineEmits<{
 	onSearch: [search: string];
 	onNodeExecute: [];
 	onDisplayModeChange: [pane: NodePanelType, mode: IRunDataDisplayMode];
+	onWorkflowActivate: [];
 }>();
 
 const props = withDefaults(
@@ -117,10 +118,14 @@ const onStopExecution = () => {
 const onDisplayModeChange = (pane: NodePanelType, mode: IRunDataDisplayMode) => {
 	emit('onDisplayModeChange', pane, mode);
 };
+
+const onWorkflowActivate = () => {
+	emit('onWorkflowActivate');
+};
 </script>
 
 <template>
-	<div :class="$style.mobileNodeModule">
+	<div :class="$style.mobileNodeModule" data-test-id="mobile-node-module">
 		<!-- Parameters/Settings section -->
 		<section :class="$style.nodeFormsSection" aria-label="Node parameters">
 			<NodeSettings
@@ -137,7 +142,7 @@ const onDisplayModeChange = (pane: NodePanelType, mode: IRunDataDisplayMode) => 
 				is-ndv-v2
 				@execute="onNodeExecute"
 				@stop-execution="onStopExecution"
-				@activate="$emit('onWorkflowActivate')"
+				@activate="onWorkflowActivate"
 				@switch-selected-node="onSwitchSelectedNode"
 				@open-connection-node-creator="onOpenConnectionNodeCreator"
 			/>
