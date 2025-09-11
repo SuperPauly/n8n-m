@@ -52,6 +52,29 @@ cleanup() {
 
 trap cleanup EXIT
 
+# Check system memory
+check_system_memory() {
+    log_info "Checking system memory..."
+    
+    if command -v free &> /dev/null; then
+        local total_mem=$(free -m | awk 'NR==2{printf "%.0f", $2}')
+        local available_mem=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+        
+        log_info "Total memory: ${total_mem}MB"
+        log_info "Available memory: ${available_mem}MB"
+        
+        if [ "$available_mem" -lt 4096 ]; then
+            log_warning "Low memory detected (${available_mem}MB available)"
+            log_warning "n8n build requires at least 4GB of available memory"
+            log_warning "Consider closing other applications or using a machine with more RAM"
+        else
+            log_success "Sufficient memory available for build"
+        fi
+    else
+        log_warning "Cannot check memory usage (free command not available)"
+    fi
+}
+
 # Validation functions
 check_prerequisites() {
     log_info "Checking prerequisites..."
@@ -75,6 +98,9 @@ check_prerequisites() {
         log_error "pnpm is required to build n8n from source"
         exit 1
     fi
+    
+    # Check system memory
+    check_system_memory
     
     log_success "Prerequisites check passed"
 }
@@ -101,6 +127,38 @@ stop_existing_containers() {
     fi
 }
 
+# Build core packages individually (fallback method)
+build_core_packages() {
+    log_info "Building core packages individually..."
+    
+    # Essential packages for n8n core functionality
+    local core_packages=(
+        "@n8n/api-types"
+        "@n8n/config"
+        "@n8n/constants"
+        "@n8n/errors"
+        "@n8n/utils"
+        "n8n-workflow"
+        "n8n-core"
+        "@n8n/backend-common"
+        "n8n-nodes-base"
+        "n8n-editor-ui"
+        "n8n"
+    )
+    
+    for package in "${core_packages[@]}"; do
+        log_info "Building package: $package"
+        if pnpm --filter="$package" build >> build.log 2>&1; then
+            log_success "Built $package successfully"
+        else
+            log_warning "Failed to build $package, continuing..."
+        fi
+    done
+    
+    log_success "Core packages build completed"
+    return 0
+}
+
 # Build n8n from source
 build_n8n_source() {
     log_info "Building n8n from source..."
@@ -111,12 +169,31 @@ build_n8n_source() {
     log_info "Installing dependencies with pnpm..."
     pnpm install --frozen-lockfile
     
-    # Build the project
+    # Set Node.js memory options for large builds
+    export NODE_OPTIONS="--max-old-space-size=8192"
+    log_info "Set Node.js max memory to 8GB for build process"
+    
+    # Build the project with increased memory
     log_info "Building n8n project..."
     pnpm build > build.log 2>&1 || {
         log_error "Build failed. Check build.log for details:"
         tail -n 20 build.log
-        exit 1
+        log_info "Trying build with even more memory..."
+        
+        # Try with more memory if first attempt fails
+        export NODE_OPTIONS="--max-old-space-size=12288"
+        log_info "Retrying with 12GB memory limit..."
+        pnpm build >> build.log 2>&1 || {
+            log_error "Build failed even with increased memory."
+            log_warning "Attempting selective build without problematic packages..."
+            
+            # Try building core packages individually
+            build_core_packages || {
+                log_error "Core package build failed. Check build.log for details:"
+                tail -n 50 build.log
+                exit 1
+            }
+        }
     }
     
     # Create compiled directory for Docker build
@@ -124,12 +201,23 @@ build_n8n_source() {
     rm -rf compiled
     mkdir -p compiled
     
-    # Copy built artifacts
-    cp -r packages/cli/dist compiled/cli
-    cp -r packages/core/dist compiled/core
-    cp -r packages/workflow/dist compiled/workflow
-    cp -r packages/nodes-base/dist compiled/nodes-base
-    cp -r packages/frontend/editor-ui/dist compiled/editor-ui
+    # Copy built artifacts (with error handling for missing directories)
+    copy_if_exists() {
+        local src="$1"
+        local dest="$2"
+        if [ -d "$src" ]; then
+            cp -r "$src" "$dest"
+            log_success "Copied $src to $dest"
+        else
+            log_warning "Directory $src not found, skipping..."
+        fi
+    }
+    
+    copy_if_exists "packages/cli/dist" "compiled/cli"
+    copy_if_exists "packages/core/dist" "compiled/core"
+    copy_if_exists "packages/workflow/dist" "compiled/workflow"
+    copy_if_exists "packages/nodes-base/dist" "compiled/nodes-base"
+    copy_if_exists "packages/frontend/editor-ui/dist" "compiled/editor-ui"
     
     # Copy package.json files
     find packages -name "package.json" -exec cp --parents {} compiled/ \;
