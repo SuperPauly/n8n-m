@@ -177,6 +177,21 @@ pnpm install
 pnpm build
 ```
 
+**Memory Issues:**
+The script automatically handles JavaScript heap out of memory errors by:
+1. Increasing Node.js heap size to 8GB, then 12GB
+2. Excluding memory-intensive packages like `@n8n/chat` (not essential for core functionality)
+3. Falling back to building only core packages individually
+
+If you encounter persistent memory issues:
+```bash
+# Build without chat package manually
+pnpm build --filter='!@n8n/chat'
+
+# Or build with more memory
+NODE_OPTIONS="--max-old-space-size=16384" pnpm build
+```
+
 ### Container Issues
 
 ```bash

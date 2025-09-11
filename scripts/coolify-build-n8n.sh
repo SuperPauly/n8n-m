@@ -178,20 +178,26 @@ build_n8n_source() {
     pnpm build > build.log 2>&1 || {
         log_error "Build failed. Check build.log for details:"
         tail -n 20 build.log
-        log_info "Trying build with even more memory..."
+        log_info "Trying build without memory-intensive packages..."
         
-        # Try with more memory if first attempt fails
-        export NODE_OPTIONS="--max-old-space-size=12288"
-        log_info "Retrying with 12GB memory limit..."
-        pnpm build >> build.log 2>&1 || {
-            log_error "Build failed even with increased memory."
-            log_warning "Attempting selective build without problematic packages..."
+        # Try building without problematic packages first
+        log_info "Excluding @n8n/chat package (memory-intensive, not essential for core functionality)"
+        pnpm build --filter='!@n8n/chat' >> build.log 2>&1 || {
+            log_warning "Build still failed, trying with even more memory..."
             
-            # Try building core packages individually
-            build_core_packages || {
-                log_error "Core package build failed. Check build.log for details:"
-                tail -n 50 build.log
-                exit 1
+            # Try with more memory if excluding packages doesn't work
+            export NODE_OPTIONS="--max-old-space-size=12288"
+            log_info "Retrying with 12GB memory limit and excluding chat package..."
+            pnpm build --filter='!@n8n/chat' >> build.log 2>&1 || {
+                log_error "Build failed even with increased memory."
+                log_warning "Attempting selective build of core packages only..."
+                
+                # Try building core packages individually
+                build_core_packages || {
+                    log_error "Core package build failed. Check build.log for details:"
+                    tail -n 50 build.log
+                    exit 1
+                }
             }
         }
     }
