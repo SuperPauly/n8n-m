@@ -52,7 +52,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Check system memory
+# Check system memory and return status
 check_system_memory() {
     log_info "Checking system memory..."
     
@@ -63,15 +63,18 @@ check_system_memory() {
         log_info "Total memory: ${total_mem}MB"
         log_info "Available memory: ${available_mem}MB"
         
-        if [ "$available_mem" -lt 4096 ]; then
+        if [ "$available_mem" -lt 6144 ]; then
             log_warning "Low memory detected (${available_mem}MB available)"
-            log_warning "n8n build requires at least 4GB of available memory"
-            log_warning "Consider closing other applications or using a machine with more RAM"
+            log_warning "Will exclude memory-intensive packages from build"
+            return 1  # Low memory
         else
-            log_success "Sufficient memory available for build"
+            log_success "Sufficient memory available for full build"
+            return 0  # Sufficient memory
         fi
     else
         log_warning "Cannot check memory usage (free command not available)"
+        log_warning "Will use conservative build approach"
+        return 1  # Unknown, assume low memory
     fi
 }
 
@@ -98,9 +101,6 @@ check_prerequisites() {
         log_error "pnpm is required to build n8n from source"
         exit 1
     fi
-    
-    # Check system memory
-    check_system_memory
     
     log_success "Prerequisites check passed"
 }
@@ -173,9 +173,16 @@ build_n8n_source() {
     export NODE_OPTIONS="--max-old-space-size=8192"
     log_info "Set Node.js max memory to 8GB for build process"
     
-    # Build the project with increased memory
+    # Check memory and decide build strategy
+    local build_command="pnpm build"
+    if ! check_system_memory; then
+        log_info "Using memory-conservative build (excluding @n8n/chat)"
+        build_command="pnpm build --filter='!@n8n/chat'"
+    fi
+    
+    # Build the project with appropriate strategy
     log_info "Building n8n project..."
-    pnpm build > build.log 2>&1 || {
+    $build_command > build.log 2>&1 || {
         log_error "Build failed. Check build.log for details:"
         tail -n 20 build.log
         log_info "Trying build without memory-intensive packages..."
