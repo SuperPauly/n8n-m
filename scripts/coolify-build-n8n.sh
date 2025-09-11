@@ -51,18 +51,38 @@ check_system_memory() {
     log_info "Checking system memory..."
     
     if command -v free &> /dev/null; then
-        local total_mem=$(free -m | awk 'NR==2{printf "%.0f", $2}')
-        local available_mem=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+        # Get memory info - try different approaches for compatibility
+        local memory_info=$(free -m 2>/dev/null)
+        log_info "Memory info output:"
+        echo "$memory_info" | head -3
+        
+        # Try to get available memory (column 7 in newer versions, column 4 in older)
+        local available_mem=$(echo "$memory_info" | awk 'NR==2{if($7!="") print $7; else print $4}')
+        local total_mem=$(echo "$memory_info" | awk 'NR==2{print $2}')
+        
+        # Fallback if available memory is empty or zero
+        if [ -z "$available_mem" ] || [ "$available_mem" -eq 0 ] 2>/dev/null; then
+            # Calculate available as total - used (basic estimation)
+            local used_mem=$(echo "$memory_info" | awk 'NR==2{print $3}')
+            available_mem=$((total_mem - used_mem))
+            log_info "Using calculated available memory: ${available_mem}MB"
+        fi
         
         log_info "Total memory: ${total_mem}MB"
         log_info "Available memory: ${available_mem}MB"
         
+        # Check if we have valid numbers
+        if ! [[ "$available_mem" =~ ^[0-9]+$ ]] || ! [[ "$total_mem" =~ ^[0-9]+$ ]]; then
+            log_warning "Could not parse memory information, using conservative approach"
+            return 1  # Assume low memory
+        fi
+        
         if [ "$available_mem" -lt 6144 ]; then
-            log_warning "Low memory detected (${available_mem}MB available)"
+            log_warning "Low memory detected (${available_mem}MB available, need 6144MB)"
             log_warning "Will exclude memory-intensive packages from build"
             return 1  # Low memory
         else
-            log_success "Sufficient memory available for full build"
+            log_success "Sufficient memory available for full build (${available_mem}MB >= 6144MB)"
             return 0  # Sufficient memory
         fi
     else
@@ -170,18 +190,37 @@ build_n8n() {
     log_info "Set Node.js max memory to 8GB for build process"
     
     # Check memory and decide build strategy
+    log_info "Determining build strategy based on available memory..."
     local build_command="pnpm build"
+    local memory_check_result=0
+    
     if ! check_system_memory; then
-        log_info "Using memory-conservative build (excluding @n8n/chat)"
+        memory_check_result=1
+        log_info "✅ MEMORY CHECK: Low memory detected - using conservative build"
+        log_info "✅ EXCLUDING: @n8n/chat package (memory-intensive, not essential)"
         build_command="pnpm build --filter='!@n8n/chat'"
+    else
+        memory_check_result=0
+        log_info "✅ MEMORY CHECK: Sufficient memory - attempting full build"
+        log_info "✅ INCLUDING: All packages including @n8n/chat"
+        build_command="pnpm build"
     fi
     
     # Build the project with appropriate strategy
+    log_info "Executing build command: $build_command"
     log_info "Building n8n project..."
     $build_command > build.log 2>&1 || {
+        log_error "Build failed with command: $build_command"
         log_error "Build failed. Check build.log for details:"
         tail -n 20 build.log
-        log_info "Trying build without memory-intensive packages..."
+        
+        # If we already tried conservative build and it failed, try more aggressive approaches
+        if [ "$memory_check_result" -eq 1 ]; then
+            log_warning "Conservative build failed even after excluding @n8n/chat"
+            log_info "Trying with increased memory allocation..."
+        else
+            log_info "Full build failed, trying build without memory-intensive packages..."
+        fi
         
         # Try building without problematic packages first
         log_info "Excluding @n8n/chat package (memory-intensive, not essential for core functionality)"
@@ -423,4 +462,3 @@ main() {
 
 # Run main function
 main "$@"
-
