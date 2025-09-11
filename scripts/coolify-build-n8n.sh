@@ -189,49 +189,35 @@ build_n8n() {
     export NODE_OPTIONS="--max-old-space-size=8192"
     log_info "Set Node.js max memory to 8GB for build process"
     
-    # Check memory and decide build strategy
-    log_info "Determining build strategy based on available memory..."
-    local build_command="pnpm build"
-    local memory_check_result=0
+    # ALWAYS use conservative build approach to prevent memory issues
+    log_info "🛡️  USING CONSERVATIVE BUILD STRATEGY"
+    log_info "🛡️  AUTOMATICALLY EXCLUDING @n8n/chat package to prevent memory errors"
+    log_info "🛡️  This package is memory-intensive and not essential for core n8n functionality"
     
-    if ! check_system_memory; then
-        memory_check_result=1
-        log_info "✅ MEMORY CHECK: Low memory detected - using conservative build"
-        log_info "✅ EXCLUDING: @n8n/chat package (memory-intensive, not essential)"
-        build_command="pnpm build --filter='!@n8n/chat'"
-    else
-        memory_check_result=0
-        log_info "✅ MEMORY CHECK: Sufficient memory - attempting full build"
-        log_info "✅ INCLUDING: All packages including @n8n/chat"
-        build_command="pnpm build"
-    fi
+    local build_command="pnpm build --filter='!@n8n/chat'"
     
-    # Build the project with appropriate strategy
+    # Build the project with conservative strategy
     log_info "Executing build command: $build_command"
-    log_info "Building n8n project..."
+    log_info "Building n8n project (excluding chat package)..."
     $build_command > build.log 2>&1 || {
-        log_error "Build failed with command: $build_command"
+        log_error "Conservative build failed with command: $build_command"
         log_error "Build failed. Check build.log for details:"
         tail -n 20 build.log
         
-        # If we already tried conservative build and it failed, try more aggressive approaches
-        if [ "$memory_check_result" -eq 1 ]; then
-            log_warning "Conservative build failed even after excluding @n8n/chat"
-            log_info "Trying with increased memory allocation..."
-        else
-            log_info "Full build failed, trying build without memory-intensive packages..."
-        fi
+        log_warning "Conservative build failed even after excluding @n8n/chat"
+        log_info "Trying with increased memory allocation..."
         
-        # Try building without problematic packages first
-        log_info "Excluding @n8n/chat package (memory-intensive, not essential for core functionality)"
+        # Try with more memory
+        export NODE_OPTIONS="--max-old-space-size=12288"
+        log_info "Retrying with 12GB memory limit (still excluding chat package)..."
         pnpm build --filter='!@n8n/chat' >> build.log 2>&1 || {
-            log_warning "Build still failed, trying with even more memory..."
+            log_warning "Build still failed with 12GB memory, trying with 16GB..."
             
-            # Try with more memory if excluding packages doesn't work
-            export NODE_OPTIONS="--max-old-space-size=12288"
-            log_info "Retrying with 12GB memory limit and excluding chat package..."
+            # Try with even more memory
+            export NODE_OPTIONS="--max-old-space-size=16384"
+            log_info "Retrying with 16GB memory limit (still excluding chat package)..."
             pnpm build --filter='!@n8n/chat' >> build.log 2>&1 || {
-                log_error "Build failed even with increased memory."
+                log_error "Build failed even with 16GB memory."
                 log_warning "Attempting selective build of core packages only..."
                 
                 # Try building core packages individually
