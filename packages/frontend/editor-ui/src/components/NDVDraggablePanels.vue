@@ -20,12 +20,28 @@ const PANEL_WIDTH = 350;
 const PANEL_WIDTH_LARGE = 420;
 const MIN_WINDOW_WIDTH = 2 * (SIDE_MARGIN + SIDE_PANELS_MARGIN) + MIN_PANEL_WIDTH;
 
+// Vertical layout constants
+const TOP_BOTTOM_MARGIN = 24;
+const VERTICAL_PANELS_MARGIN = 60;
+const MIN_PANEL_HEIGHT = 200;
+const PANEL_HEIGHT = 250;
+const PANEL_HEIGHT_LARGE = 300;
+const MIN_WINDOW_HEIGHT = 3 * MIN_PANEL_HEIGHT + 2 * VERTICAL_PANELS_MARGIN + 2 * TOP_BOTTOM_MARGIN;
+
 const initialMainPanelWidth: Record<MainPanelType, number> = {
 	regular: MAIN_NODE_PANEL_WIDTH,
 	dragless: MAIN_NODE_PANEL_WIDTH,
 	unknown: MAIN_NODE_PANEL_WIDTH,
 	inputless: MAIN_NODE_PANEL_WIDTH,
 	wide: MAIN_NODE_PANEL_WIDTH * 2,
+};
+
+const initialMainPanelHeight: Record<MainPanelType, number> = {
+	regular: PANEL_HEIGHT,
+	dragless: PANEL_HEIGHT,
+	unknown: PANEL_HEIGHT,
+	inputless: PANEL_HEIGHT,
+	wide: PANEL_HEIGHT_LARGE,
 };
 
 interface Props {
@@ -44,6 +60,7 @@ const props = defineProps<Props>();
 const isDragging = ref<boolean>(false);
 const initialized = ref<boolean>(false);
 const containerWidth = ref<number>(uiStore.appGridDimensions.width);
+const mainPanelVerticalPosition = ref<number>(0);
 
 const emit = defineEmits<{
 	init: [{ position: number }];
@@ -124,6 +141,20 @@ const currentNodePaneType = computed((): MainPanelType => {
 	return props.nodeType.parameterPane ?? 'regular';
 });
 
+const useVerticalLayout = computed((): boolean => {
+	// Use vertical layout for mobile/portrait screens or when height > width
+	const { width, height } = uiStore.appGridDimensions;
+	// Enable vertical layout for:
+	// 1. Portrait orientation (height > width)
+	// 2. Mobile screens (width < 768px)
+	// 3. Touch devices (detected via CSS media query support)
+	const isMobile = width < 768;
+	const isPortrait = height > width;
+	const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+	return (isPortrait && isTouchDevice) || isMobile;
+});
+
 const mainPanelDimensions = computed(() => {
 	return ndvStore.mainPanelDimensions[currentNodePaneType.value];
 });
@@ -141,6 +172,42 @@ const calculatedPositions = computed(
 		return {
 			inputPanelRelativeRight,
 			outputPanelRelativeLeft,
+		};
+	},
+);
+
+const calculatedVerticalPositions = computed(
+	(): {
+		inputPanelRelativeBottom: number;
+		outputPanelRelativeTop: number;
+		mainPanelRelativeTop: number;
+		mainPanelRelativeBottom: number;
+	} => {
+		const hasInput = slots.input !== undefined;
+		const containerHeight = uiStore.appGridDimensions.height;
+
+		// Default heights for each panel (in pixels)
+		const inputPanelHeight = hasInput ? PANEL_HEIGHT : 0;
+		const mainPanelHeight = initialMainPanelHeight[currentNodePaneType.value];
+		const outputPanelHeight = PANEL_HEIGHT;
+
+		// Convert to relative positions (0-1)
+		const inputPanelRelativeHeight = inputPanelHeight / containerHeight;
+		const mainPanelRelativeHeight = mainPanelHeight / containerHeight;
+		const outputPanelRelativeHeight = outputPanelHeight / containerHeight;
+
+		// Calculate positions from top
+		const inputPanelRelativeTop = pxToRelativeHeight(TOP_BOTTOM_MARGIN);
+		const mainPanelRelativeTop =
+			inputPanelRelativeTop + inputPanelRelativeHeight + pxToRelativeHeight(VERTICAL_PANELS_MARGIN);
+		const outputPanelRelativeTop =
+			mainPanelRelativeTop + mainPanelRelativeHeight + pxToRelativeHeight(VERTICAL_PANELS_MARGIN);
+
+		return {
+			inputPanelRelativeBottom: 1 - inputPanelRelativeTop - inputPanelRelativeHeight,
+			outputPanelRelativeTop,
+			mainPanelRelativeTop,
+			mainPanelRelativeBottom: 1 - mainPanelRelativeTop - mainPanelRelativeHeight,
 		};
 	},
 );
@@ -204,6 +271,56 @@ const outputPanelStyles = computed((): { left: string; transform: string } => {
 		transform: `translateX(-${relativeWidthToPx(outputPanelRelativeTranslate.value)}px)`,
 	};
 });
+
+const verticalInputPanelStyles = computed(
+	(): { top: string; bottom: string; left: string; right: string } => {
+		const mainPanelTop =
+			mainPanelVerticalPosition.value || calculatedVerticalPositions.value.mainPanelRelativeTop;
+		const inputBottom = 1 - mainPanelTop + pxToRelativeHeight(VERTICAL_PANELS_MARGIN);
+
+		return {
+			top: `${TOP_BOTTOM_MARGIN}px`,
+			bottom: `${relativeHeightToPx(inputBottom)}px`,
+			left: `${SIDE_MARGIN}px`,
+			right: `${SIDE_MARGIN}px`,
+		};
+	},
+);
+
+const verticalMainPanelStyles = computed(
+	(): { top: string; bottom: string; left: string; right: string } => {
+		const topPosition =
+			mainPanelVerticalPosition.value || calculatedVerticalPositions.value.mainPanelRelativeTop;
+		const mainPanelHeight = initialMainPanelHeight[currentNodePaneType.value];
+		const bottomPosition = 1 - topPosition - mainPanelHeight / uiStore.appGridDimensions.height;
+
+		return {
+			top: `${relativeHeightToPx(topPosition)}px`,
+			bottom: `${relativeHeightToPx(bottomPosition)}px`,
+			left: `${SIDE_MARGIN}px`,
+			right: `${SIDE_MARGIN}px`,
+		};
+	},
+);
+
+const verticalOutputPanelStyles = computed(
+	(): { top: string; bottom: string; left: string; right: string } => {
+		const mainPanelTop =
+			mainPanelVerticalPosition.value || calculatedVerticalPositions.value.mainPanelRelativeTop;
+		const mainPanelHeight = initialMainPanelHeight[currentNodePaneType.value];
+		const outputTop =
+			mainPanelTop +
+			mainPanelHeight / uiStore.appGridDimensions.height +
+			pxToRelativeHeight(VERTICAL_PANELS_MARGIN);
+
+		return {
+			top: `${relativeHeightToPx(outputTop)}px`,
+			bottom: `${TOP_BOTTOM_MARGIN}px`,
+			left: `${SIDE_MARGIN}px`,
+			right: `${SIDE_MARGIN}px`,
+		};
+	},
+);
 
 const hasDoubleWidth = computed((): boolean => {
 	return props.nodeType?.parameterPane === 'wide';
@@ -281,6 +398,26 @@ function setPositions(relativeLeft: number): void {
 	});
 }
 
+function setVerticalPositions(relativeTop: number): void {
+	// For vertical layout, we'll store the main panel's top position
+	// This is a simplified version - in a full implementation, you'd want to
+	// store vertical dimensions in the NDV store similar to horizontal dimensions
+	const containerHeight = uiStore.appGridDimensions.height;
+	const mainPanelHeight = initialMainPanelHeight[currentNodePaneType.value];
+	const minTop = pxToRelativeHeight(TOP_BOTTOM_MARGIN + PANEL_HEIGHT + VERTICAL_PANELS_MARGIN);
+	const maxTop =
+		1 -
+		pxToRelativeHeight(TOP_BOTTOM_MARGIN + PANEL_HEIGHT + VERTICAL_PANELS_MARGIN) -
+		mainPanelHeight / containerHeight;
+
+	// Constrain the position
+	const constrainedTop = Math.max(minTop, Math.min(maxTop, relativeTop));
+
+	// For now, we'll just update a reactive ref to trigger re-renders
+	// In a full implementation, you'd want to store this in the NDV store
+	mainPanelVerticalPosition.value = constrainedTop;
+}
+
 function setPositionByName(position: 'minLeft' | 'maxRight' | 'initial') {
 	const positionByName: Record<string, number> = {
 		minLeft: minimumLeftPosition.value,
@@ -297,6 +434,14 @@ function pxToRelativeWidth(px: number): number {
 
 function relativeWidthToPx(relativeWidth: number) {
 	return relativeWidth * containerWidth.value;
+}
+
+function pxToRelativeHeight(px: number): number {
+	return px / uiStore.appGridDimensions.height;
+}
+
+function relativeHeightToPx(relativeHeight: number) {
+	return relativeHeight * uiStore.appGridDimensions.height;
 }
 
 function onResizeEnd() {
@@ -348,9 +493,18 @@ function onDragStart() {
 }
 
 function onDrag(position: XYPosition) {
-	const relativeLeft = pxToRelativeWidth(position[0]) - mainPanelDimensions.value.relativeWidth / 2;
-
-	setPositions(relativeLeft);
+	if (useVerticalLayout.value) {
+		// Vertical drag logic - adjust panel heights
+		const relativeTop =
+			pxToRelativeHeight(position[1]) -
+			initialMainPanelHeight[currentNodePaneType.value] / uiStore.appGridDimensions.height / 2;
+		setVerticalPositions(relativeTop);
+	} else {
+		// Horizontal drag logic (original)
+		const relativeLeft =
+			pxToRelativeWidth(position[0]) - mainPanelDimensions.value.relativeWidth / 2;
+		setPositions(relativeLeft);
+	}
 }
 
 function onDragEnd() {
@@ -372,13 +526,24 @@ function onDragEnd() {
 			:root-node="ndvStore.activeNode"
 			@switch-selected-node="onSwitchSelectedNode"
 		/>
-		<div v-if="!hideInputAndOutput" :class="$style.inputPanel" :style="inputPanelStyles">
+		<div
+			v-if="!hideInputAndOutput"
+			:class="useVerticalLayout ? $style.verticalInputPanel : $style.inputPanel"
+			:style="useVerticalLayout ? verticalInputPanelStyles : inputPanelStyles"
+		>
 			<slot name="input"></slot>
 		</div>
-		<div v-if="!hideInputAndOutput" :class="$style.outputPanel" :style="outputPanelStyles">
+		<div
+			v-if="!hideInputAndOutput"
+			:class="useVerticalLayout ? $style.verticalOutputPanel : $style.outputPanel"
+			:style="useVerticalLayout ? verticalOutputPanelStyles : outputPanelStyles"
+		>
 			<slot name="output"></slot>
 		</div>
-		<div :class="$style.mainPanel" :style="mainPanelStyles">
+		<div
+			:class="useVerticalLayout ? $style.verticalMainPanel : $style.mainPanel"
+			:style="useVerticalLayout ? verticalMainPanelStyles : mainPanelStyles"
+		>
 			<N8nResizeWrapper
 				:is-resizing-enabled="currentNodePaneType !== 'unknown'"
 				:width="relativeWidthToPx(mainPanelDimensions.relativeWidth)"
@@ -389,12 +554,17 @@ function onDragEnd() {
 				@resize="onResizeThrottle"
 				@resizeend="onResizeEnd"
 			>
-				<div :class="$style.dragButtonContainer">
+				<div
+					:class="
+						useVerticalLayout ? $style.verticalDragButtonContainer : $style.dragButtonContainer
+					"
+				>
 					<PanelDragButton
 						v-if="!hideInputAndOutput && isDraggable"
 						:class="{ [$style.draggable]: true, [$style.visible]: isDragging }"
 						:can-move-left="canMoveLeft"
 						:can-move-right="canMoveRight"
+						:vertical-layout="useVerticalLayout"
 						@dragstart="onDragStart"
 						@drag="onDrag"
 						@dragend="onDragEnd"
@@ -433,6 +603,54 @@ function onDragEnd() {
 
 	> * {
 		border-radius: 0 var(--border-radius-large) var(--border-radius-large) 0;
+	}
+}
+
+// Vertical layout styles
+.verticalInputPanel {
+	position: absolute;
+	z-index: 0;
+	min-height: 150px;
+	// Better touch targets for mobile
+	touch-action: pan-y;
+
+	> * {
+		border-radius: var(--border-radius-large) var(--border-radius-large) 0 0;
+		height: 100%;
+	}
+}
+
+.verticalMainPanel {
+	position: absolute;
+	z-index: 1;
+	// Better touch targets for mobile
+	touch-action: pan-y;
+
+	&:hover {
+		.draggable {
+			visibility: visible;
+		}
+	}
+
+	// Show drag handle on touch devices without hover
+	@media (hover: none) and (pointer: coarse) {
+		.draggable {
+			visibility: visible;
+			opacity: 0.7;
+		}
+	}
+}
+
+.verticalOutputPanel {
+	position: absolute;
+	z-index: 0;
+	min-height: 150px;
+	// Better touch targets for mobile
+	touch-action: pan-y;
+
+	> * {
+		border-radius: 0 0 var(--border-radius-large) var(--border-radius-large);
+		height: 100%;
 	}
 }
 
@@ -475,6 +693,23 @@ function onDragEnd() {
 	height: 12px;
 	display: flex;
 	justify-content: center;
+	pointer-events: none;
+
+	.draggable {
+		pointer-events: all;
+	}
+	&:hover .draggable {
+		visibility: visible;
+	}
+}
+
+.verticalDragButtonContainer {
+	position: absolute;
+	left: -12px;
+	height: 100%;
+	width: 12px;
+	display: flex;
+	align-items: center;
 	pointer-events: none;
 
 	.draggable {

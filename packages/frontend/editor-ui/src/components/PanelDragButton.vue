@@ -5,6 +5,7 @@ import type { XYPosition } from '@/Interface';
 defineProps<{
 	canMoveRight: boolean;
 	canMoveLeft: boolean;
+	verticalLayout?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -35,20 +36,36 @@ const onDragStart = () => {
 		@dragend="onDragEnd"
 	>
 		<template #default="{ isDragging }">
-			<div :class="{ [$style.dragButton]: true }" data-test-id="panel-drag-button">
+			<div
+				:class="{ [$style.dragButton]: true, [$style.verticalDragButton]: verticalLayout }"
+				data-test-id="panel-drag-button"
+			>
 				<span
-					v-if="canMoveLeft"
+					v-if="canMoveLeft && !verticalLayout"
 					:class="{ [$style.leftArrow]: true, [$style.visible]: isDragging }"
 				>
 					<n8n-icon icon="arrow-left" />
 				</span>
 				<span
-					v-if="canMoveRight"
+					v-if="canMoveRight && !verticalLayout"
 					:class="{ [$style.rightArrow]: true, [$style.visible]: isDragging }"
 				>
 					<n8n-icon icon="arrow-right" />
 				</span>
-				<div :class="$style.grid">
+				<!-- Vertical arrows for vertical layout -->
+				<span
+					v-if="canMoveLeft && verticalLayout"
+					:class="{ [$style.upArrow]: true, [$style.visible]: isDragging }"
+				>
+					<n8n-icon icon="arrow-up" />
+				</span>
+				<span
+					v-if="canMoveRight && verticalLayout"
+					:class="{ [$style.downArrow]: true, [$style.visible]: isDragging }"
+				>
+					<n8n-icon icon="arrow-down" />
+				</span>
+				<div :class="{ [$style.grid]: true, [$style.verticalGrid]: verticalLayout }">
 					<div>
 						<div></div>
 						<div></div>
@@ -89,10 +106,24 @@ const onDragStart = () => {
 
 	&:hover {
 		.leftArrow,
-		.rightArrow {
+		.rightArrow,
+		.upArrow,
+		.downArrow {
 			visibility: visible;
 		}
 	}
+}
+
+.verticalDragButton {
+	width: 21px;
+	height: 64px;
+	border-top-left-radius: var(--border-radius-base);
+	border-bottom-left-radius: var(--border-radius-base);
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+	// Better touch target for mobile
+	min-height: 44px; // iOS recommended minimum touch target
+	touch-action: pan-y;
 }
 
 .visible {
@@ -117,6 +148,20 @@ const onDragStart = () => {
 	right: -16px;
 }
 
+.upArrow {
+	composes: arrow;
+	top: -16px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+.downArrow {
+	composes: arrow;
+	bottom: -16px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
 .grid {
 	> div {
 		display: flex;
@@ -136,6 +181,32 @@ const onDragStart = () => {
 
 			&:last-child {
 				margin-right: 0;
+			}
+		}
+	}
+}
+
+.verticalGrid {
+	> div {
+		display: flex;
+		flex-direction: column;
+
+		&:first-child {
+			> div {
+				margin-bottom: 0;
+				margin-right: 2px;
+			}
+		}
+
+		> div {
+			height: 2px;
+			width: 2px;
+			border-radius: 50%;
+			background-color: var(--color-foreground-xdark);
+			margin-bottom: 4px;
+
+			&:last-child {
+				margin-bottom: 0;
 			}
 		}
 	}
