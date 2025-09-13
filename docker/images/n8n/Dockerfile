@@ -6,7 +6,21 @@ ARG TARGETPLATFORM
 # ==============================================================================
 # STAGE 1: System Dependencies & Base Setup
 # ==============================================================================
-FROM n8nio/base:${NODE_VERSION} AS system-deps
+FROM node:${NODE_VERSION}-alpine AS system-deps
+
+# Install required OS packages and runtime tools
+RUN apk add --no-cache \
+        git \
+        openssh \
+        openssl \
+        graphicsmagick \
+        tini \
+        tzdata \
+        ca-certificates \
+        libc6-compat \
+        jq && \
+    npm install -g full-icu@1.5.0 && \
+    rm -rf /tmp/* /root/.npm /root/.cache/node
 
 # ==============================================================================
 # STAGE 2: Application Artifact Processor
@@ -62,7 +76,12 @@ RUN cd /usr/local/lib/node_modules/n8n && \
     mkdir -p /home/node/.n8n && \
     chown -R node:node /home/node
 
-RUN cd /usr/local/lib/node_modules/n8n/node_modules/pdfjs-dist && npm install @napi-rs/canvas
+# Install optional canvas dependency when pdfjs-dist is present
+RUN if [ -d "/usr/local/lib/node_modules/n8n/node_modules/pdfjs-dist" ]; then \
+      cd /usr/local/lib/node_modules/n8n/node_modules/pdfjs-dist && npm install @napi-rs/canvas; \
+    else \
+      echo "pdfjs-dist not found; skipping @napi-rs/canvas install"; \
+    fi
 
 EXPOSE 5678/tcp
 USER node
